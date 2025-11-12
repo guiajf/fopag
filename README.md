@@ -12,7 +12,7 @@ de acordo com o interesse do usuário, ao final do notebbok *baixar_fopag.ipynb*
 
 ### Dashboard
 
-Criamos uma dashboard básico para visualização de algumas métricas e estatísticas baseadas nos dados referentes 
+Criamos um dashboard básico para visualização de algumas métricas e estatísticas baseadas nos dados referentes 
 ao período estudado. O notebbok *fopag_dashboard* contém as funções para uma análise simplificada, que pode 
 ser expandida. Os principais indicadores analisados são:
 
