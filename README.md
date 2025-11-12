@@ -17,3 +17,7 @@ ao período estudado. O notebbok *fopag_dashboard* contém as funções para uma
 ser expandida, de acordo com as necessidades do usuário. Os principais indicadores analisados são:
 
 *Visão Geral*, *Distribuição Salarial*, *Situação Funcional*, *Natureza do Vínculo*, *Lotação por Secretaria*, *Gasto por Centro de Custo*, *Cargos de Comando*, *Análise de Professores* e *Supersalários*.
+
+Os gráficos podem ser selecionados em uma caixa **dropdown**. 
+A imagem de abertura é a seguinte:
+![]('dashboard.png')
