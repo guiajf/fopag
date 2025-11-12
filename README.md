@@ -14,6 +14,6 @@ de acordo com o interesse do usuário, ao final do notebbok *baixar_fopag.ipynb*
 
 Criamos um dashboard básico para visualização de algumas métricas e estatísticas baseadas nos dados referentes 
 ao período estudado. O notebbok *fopag_dashboard* contém as funções para uma análise simplificada, que pode 
-ser expandida. Os principais indicadores analisados são:
+ser expandida, de acordo com as necessidades do usuário. Os principais indicadores analisados são:
 
 *Visão Geral*, *Distribuição Salarial*, *Situação Funcional*, *Natureza do Vínculo*, *Lotação por Secretaria*, *Gasto por Centro de Custo*, *Cargos de Comando*, *Análise de Professores* e *Supersalários*.
