@@ -107,7 +107,7 @@ periodos = [#'11/2022',
 
 # Chamar a função com delay de 3 segundos entre requisições
 baixar_dados_transparencia(periodos, delay_segundos=3)
-´´´
+```
 
 ### Dashboard
 
