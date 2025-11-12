@@ -117,7 +117,7 @@ ser expandida, de acordo com as necessidades do usuário. Os principais indicado
 
 *Visão Geral*, *Distribuição Salarial*, *Situação Funcional*, *Natureza do Vínculo*, *Lotação por Secretaria*, *Gasto por Centro de Custo*, *Cargos de Comando*, *Análise de Professores* e *Supersalários*.
 
-O código **jq** convertido para **Python** ficou assim: 
+Levando em conta os acréscimos para a criação do *dashboard*, o código **jq** convertido para **Python** ficou assim: 
 
 ```Python
 import re
@@ -543,5 +543,7 @@ if __name__ == '__main__':
 ```
 
 Os gráficos podem ser selecionados em uma caixa **dropdown**. 
-A imagem de abertura é a seguinte:
+A tela inicial é a seguinte:
 ![](fopag.png)
+
+O gráfico interativo pode ser acessado em: https://fptc-dashboard.onrender.com/.
