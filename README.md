@@ -20,4 +20,4 @@ ser expandida, de acordo com as necessidades do usuário. Os principais indicado
 
 Os gráficos podem ser selecionados em uma caixa **dropdown**. 
 A imagem de abertura é a seguinte:
-![]('fopag.png')
+![](fopag.png)
