@@ -119,7 +119,7 @@ ser expandida, de acordo com as necessidades do usuário. Os principais indicado
 
 O código **jq** convertido para **Python** ficou assim: 
 
-´´Ṕython
+´´´Python
 import re
 import json
 import pandas as pd
