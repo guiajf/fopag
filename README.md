@@ -119,7 +119,7 @@ ser expandida, de acordo com as necessidades do usuário. Os principais indicado
 
 O código **jq** convertido para **Python** ficou assim: 
 
-´´´Python
+```Python
 import re
 import json
 import pandas as pd
@@ -540,7 +540,6 @@ def update_graph(analise):
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=8050)
-
 ```
 
 Os gráficos podem ser selecionados em uma caixa **dropdown**. 
