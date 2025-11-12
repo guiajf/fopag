@@ -9,4 +9,5 @@ Agora, reproduzimos a rotina em Python.
 
 Para download dos dados, criamos uma função para baixar o arquivo XML, disponível no 
 [Portal da Transparência](https://trescoracoes-mg.portaltp.com.br/api/transparencia.asmx/json_servidores),
-salvo no formato JSON depois de processado.
+salvo no formato JSON depois de processado. Poderá ser fornecida uma lista de períodos a serem baixados,
+de acordo com o interesse do usuário, ao final do notebbok *baixar_fopag.ipynb*. 
