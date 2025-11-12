@@ -542,8 +542,11 @@ if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=8050)
 ```
 
+
+### Considerações finais
+
 Os gráficos podem ser selecionados em uma caixa **dropdown**. 
 A tela inicial é a seguinte:
 ![](fopag.png)
 
-O gráfico interativo pode ser acessado em: https://fptc-dashboard.onrender.com/.
+O *dashboard* pode ser acessado em: https://fptc-dashboard.onrender.com/.
