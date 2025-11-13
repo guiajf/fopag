@@ -549,4 +549,4 @@ Os gráficos podem ser selecionados em uma caixa **dropdown**.
 A tela inicial é a seguinte:
 ![](fopag.png)
 
-O *dashboard* pode ser acessado em: https://fptc-dashboard.onrender.com/.
+O *dashboard* pode ser acessado em: https://guilhermeferreirajf.pythonanywhere.com/.
