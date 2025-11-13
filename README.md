@@ -1,6 +1,6 @@
 # Análise da folha de pagamento do município de Três Corações
 
-Já se passaram alguns anos, desde que utilizei [jq](https://rpubs.com/guilhermeferreirajf/pmtc) para analisar a folha de pagamento da Prefeitura Municipal de Três Corações, município situado às margens da Fernão Dias, no Sul de Minas. Agora, reproduzimos a mesma rotina em Python.
+Já se passaram alguns anos, desde que utilizei [jq](https://rpubs.com/guilhermeferreirajf/pmtc) para analisar a folha de pagamento da Prefeitura de Três Corações, município situado às margens da Fernão Dias, no Sul de Minas. Agora, reproduzimos a mesma rotina em Python.
 
 ### Coleta de dados
 
