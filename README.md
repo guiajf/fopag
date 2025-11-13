@@ -545,8 +545,8 @@ if __name__ == '__main__':
 
 ### Considerações finais
 
-Os gráficos podem ser selecionados em uma caixa **dropdown**. 
-A tela inicial é a seguinte:
+Os gráficos podem ser selecionados em uma caixa **dropdown**, 
+de acordo com a tela inicial:
 ![](fopag.png)
 
 O *dashboard* pode ser acessado em: https://guilhermeferreirajf.pythonanywhere.com/.
