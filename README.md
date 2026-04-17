@@ -1,551 +1,516 @@
-# Análise da folha de pagamento do município de Três Corações
+# Catálogo dos imóveis em áreas de risco
 
-Já se passaram alguns anos, desde que utilizei [jq](https://rpubs.com/guilhermeferreirajf/pmtc) para analisar a folha de pagamento da Prefeitura de Três Corações, município situado às margens da Fernão Dias, no Sul de Minas. Agora, reproduzimos a mesma rotina em Python.
+### Introdução
 
-### Coleta de dados
+Após mapear as [áreas de risco](https://github.com/guiajf/riscojf) e realizar uma [análise quantitativa](https://github.com/guiajf/domicilios) dos domicílios afetados, agora efetuamos o levantamento do endereço completo dos imóveis situados nessas regiões, com base nos dados do **Censo 2022.**
 
-Para download dos dados, criamos uma função para baixar o arquivo XML, disponível no 
-[Portal da Transparência](https://trescoracoes-mg.portaltp.com.br/api/transparencia.asmx/json_servidores),
-salvo no formato JSON depois de processado. Poderá ser fornecida uma lista de períodos a serem baixados,
-de acordo com o interesse do usuário, ao final do notebbok *baixar_fopag.ipynb*:
+A seguir, demonstramos como as ferramentas de análise geoespacial podem auxiliar o poder públicao na gestão cadastral das famílias afetadas pelas chuvas, que têm direito a benefícios sociais em decorrência da situação, conforme reportagem do [Tribuna de Minas](https://tribunademinas.com.br/noticias/cidade/12-03-2026/beneficios-pjf-chuvas.html).
 
-```Python
-import requests
-import re
-from datetime import datetime
-import time
-import os
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+### Objetivo
 
-def criar_sessao_segura():
-    """Cria uma sessão com retry e verificação SSL"""
-    session = requests.Session()
-    
-    # Configura política de retry (3 tentativas com backoff)
-    retry = Retry(
-        total=3,
-        backoff_factor=1,
-        status_forcelist=[500, 502, 503, 504]
-    )
-    
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-    
-    return session
+Este projeto visa identificar de forma individualizada os imóveis situados em áreas de risco, de acordo com o mapa fornecido pela *Subsecretaria de Proteção e Defesa Civil* de Juiz de Fora e dados do **Censo 2022**, para subsidiar ações de controle durante a concessão de benefícios aos atingidos pelas enchentes e deslizamentos provocados pelas chuvas de fevereiro de 2026.
 
-def baixar_dados_transparencia(periodos, delay_segundos=2):
-    base_url = "https://trescoracoes-mg.portaltp.com.br/api/transparencia.asmx/json_servidores"
-    
-    # Criar sessão segura
-    session = criar_sessao_segura()
-    
-    for i, periodo in enumerate(periodos):
-        try:
-            # Parse da data no formato mm/aaaa
-            data = datetime.strptime(periodo, '%m/%Y')
-            mes = data.month
-            ano = data.year
-            
-            # Baixar o arquivo XML com verificação SSL
-            params = {'ano': ano, 'mes': mes}
-            print(f"Baixando dados para {mes}/{ano}...")
-            response = session.get(base_url, params=params, verify=True)  # verify=True é o padrão
-            
-            # Verificar se a requisição foi bem-sucedida
-            response.raise_for_status()
-            
-            # Nome do arquivo no formato fptc_mmAANO.xml
-            nome_arquivo_xml = f'fptc_{mes:02d}{ano}.xml'
-            nome_arquivo_json = f'fptc_{mes:02d}{ano}.json'
-            
-            # Salvar o XML
-            with open(nome_arquivo_xml, 'wb') as f:
-                f.write(response.content)
-            
-            # Processar para remover tags e salvar como JSON
-            with open(nome_arquivo_xml, 'r', encoding='utf-8') as xml_file:
-                content = xml_file.read()
-            
-            clean_content = re.sub('<[^>]*>', '', content)
-            
-            with open(nome_arquivo_json, 'w', encoding='utf-8') as json_file:
-                json_file.write(clean_content)
+### Passo a passo:
 
-            # Remover o arquivo XML após processamento
-            os.remove(nome_arquivo_xml)
-                
-            print(f"Arquivos para {mes:02d}/{ano} processados com sucesso!")
-            
-            # Adicionar delay entre requisições (exceto após o último item)
-            if i < len(periodos) - 1:
-                print(f"Aguardando {delay_segundos} segundos...")
-                time.sleep(delay_segundos)
-            
-        except requests.exceptions.SSLError as e:
-            print(f"Erro de SSL ao processar {periodo}: {str(e)}")
-            print("Tentando com verificação SSL desativada (modo inseguro)...")
-            # Fallback para verify=False se o SSL falhar
-            try:
-                response = session.get(base_url, params=params, verify=False)
-                response.raise_for_status()
-                # ... resto do processamento ...
-            except Exception as fallback_e:
-                print(f"Falha mesmo com verify=False: {str(fallback_e)}")
-                
-        except Exception as e:
-            print(f"Erro ao processar {periodo}: {str(e)}")
+1. Importamos as bibliotecas necessárias.
+2. Listamos as áreas de risco.
+3. Carregamos os dados do **Censo 2022**.
+3. Identificamos os imóveis situados nas áreas de risco.
+4. Extraímos os endereços completos.
+5. Preparamos os dados para exportação.
+6. Salvamos o arquivo *csv*.
 
-# Lista de períodos a serem baixados
-periodos = [#'11/2022', 
-            #'12/2024', 
-            #'06/2025',
-            #'07/2025',
-            '08/2025']
+### Bibliotecas
 
-# Chamar a função com delay de 3 segundos entre requisições
-baixar_dados_transparencia(periodos, delay_segundos=3)
-```
+Carregamos as seguintes bibliotecas:
 
-### Dashboard
+- **pandas:** biblioteca fundamental para análise de dados em Python, oferece estruturas como DataFrame e Series para manipulação e análise de dados tabulares;
+- **numpy:** pacote essencial para computação científica, fornece suporte a arrays multidimensionais e funções matemáticas de alto desempenho;
+- **geopandas:** extensão do pandas que facilita o trabalho com dados geoespaciais, permitindo operações geométricas e projeções cartográficas em estruturas de DataFrame;
+- **zipfile:** módulo da biblioteca padrão para criação, leitura e extração de arquivos ZIP;
+- **Point (shapely.geometry):** classe da biblioteca shapely para representação e manipulação de pontos geométricos, fundamental para operações geoespaciais;
+- **os:** módulo da biblioteca padrão que fornece interface para funcionalidades do sistema operacional, como manipulação de arquivos e diretórios;
+- **fiona:** biblioteca para leitura e escrita de dados geoespaciais em diversos formatos, atuando como camada de abstração sobre o OGR;
+- **matplotlib.pyplot:** biblioteca fundamental para visualização de dados em Python, fornece interface estilo MATLAB para criação de gráficos estáticos, permitindo controle preciso sobre figuras, eixos, cores e anotações;
+- **seaborn:** biblioteca de visualização estatística baseada no matplotlib, oferece interface de alto nível para criação de gráficos atrativos com suporte nativo a DataFrames do pandas, paletas acessíveis e funções especializadas para análise exploratória.
 
-Criamos um dashboard básico para visualização de algumas métricas e estatísticas baseadas nos dados referentes 
-ao período estudado. O notebbok *fopag_dashboard* contém as funções para uma análise simplificada, que pode 
-ser expandida, de acordo com as necessidades do usuário. Os principais indicadores analisados são:
 
-*Visão Geral*, *Distribuição Salarial*, *Situação Funcional*, *Natureza do Vínculo*, *Lotação por Secretaria*, *Gasto por Centro de Custo*, *Cargos de Comando*, *Análise de Professores* e *Supersalários*.
-
-Levando em conta os acréscimos para a criação do *dashboard*, o código **jq** convertido para **Python** ficou assim: 
-
-```Python
-import re
-import json
+```python
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import dash
-from dash import dcc, html, Input, Output, callback
+import geopandas as gpd
+import zipfile
+from shapely.geometry import Point
+import os
+import fiona
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+import locale
+```
+
+### Carregamos as áreas de risco
+
+
+```python
+print("Carregando áreas de risco...")
+camadas = fiona.listlayers("mapa_risco_jf.kml")
+gdfs = []
+for layer in camadas:
+    gdf = gpd.read_file("mapa_risco_jf.kml", layer=layer)
+    gdf['camada_origem'] = layer
+    gdfs.append(gdf)
+gdf_risco_original = pd.concat(gdfs, ignore_index=True)
+
+# Manter apenas polígonos
+gdf_risco_pol = gdf_risco_original[
+    gdf_risco_original.geometry.geom_type.isin(['Polygon', 'MultiPolygon'])
+].copy()
+print(f"Polígonos de risco carregados: {len(gdf_risco_pol)}")
+```
+
+    Carregando áreas de risco...
+    Polígonos de risco carregados: 1162
+
+
+### Carregamos os dados do Censo 2022
+
+
+```python
+print("\nCarregando dados do CNEFE...")
+
+with zipfile.ZipFile('domicilios_jf.zip') as z:
+    with z.open('3136702_JUIZ_DE_FORA.csv') as f:
+        # Definir tipos específicos para as colunas
+        dtype_spec = {
+            'NOM_COMP_ELEM1': str,
+            'VAL_COMP_ELEM1': str,
+            'NOM_COMP_ELEM2': str,
+            'VAL_COMP_ELEM2': str,
+            'NOM_COMP_ELEM3': str,
+            'VAL_COMP_ELEM3': str,
+            'NOM_COMP_ELEM4': str,
+            'VAL_COMP_ELEM4': str,
+            'NOM_COMP_ELEM5': str,
+            'VAL_COMP_ELEM5': str
+        }
+        
+        df = pd.read_csv(f, sep=';', encoding='latin1', dtype=dtype_spec)
+
+print(f"Total de registros no CNEFE: {len(df):,}")
+
+# Filtrar apenas imóveis com coordenadas válidas
+df_coords = df.dropna(subset=['LATITUDE', 'LONGITUDE'])
+df_coords = df_coords[(df_coords['LATITUDE'] != 0) & (df_coords['LONGITUDE'] != 0)]
+print(f"Registros com coordenadas válidas: {len(df_coords):,}")
+
+# Criar GeoDataFrame
+geometry = [Point(xy) for xy in zip(df_coords['LONGITUDE'], df_coords['LATITUDE'])]
+gdf_domicilios = gpd.GeoDataFrame(df_coords, geometry=geometry, crs="EPSG:4326")
+```
+
+    
+    Carregando dados do CNEFE...
+    Total de registros no CNEFE: 307,905
+    Registros com coordenadas válidas: 307,905
+
+
+### Identificamos os imóveis situados em áreas de risco
+
+
+```python
+print("\nIdentificando imóveis em áreas de risco...")
+
+# Converter para UTM (projeção adequada para Juiz de Fora)
+gdf_domicilios_utm = gdf_domicilios.to_crs(epsg=31983)
+gdf_risco_utm = gdf_risco_pol.to_crs(epsg=31983)
+
+# Spatial join para encontrar imóveis dentro dos polígonos de risco
+domicilios_risco = gpd.sjoin(
+    gdf_domicilios_utm,
+    gdf_risco_utm[['geometry', 'camada_origem']],
+    how='inner',
+    predicate='within'
+)
+
+print(f"Imóveis em áreas de risco: {len(domicilios_risco)}")
+
+```
+
+    
+    Identificando imóveis em áreas de risco...
+    Imóveis em áreas de risco: 71472
+
+
+### Extraísmos os endereços completos
+
+
+```python
+def construir_endereco(row):
+    """
+    Constrói o endereço completo a partir das colunas do CNEFE,
+    conforme dicionário de dados fornecido.
+    """
+    # Partes principais do endereço
+    tipo_log = str(row.get('NOM_TIPO_SEGLOGR', '')).strip() if pd.notna(row.get('NOM_TIPO_SEGLOGR')) else ''
+    titulo_log = str(row.get('NOM_TITULO_SEGLOGR', '')).strip() if pd.notna(row.get('NOM_TITULO_SEGLOGR')) else ''
+    nome_log = str(row.get('NOM_SEGLOGR', '')).strip() if pd.notna(row.get('NOM_SEGLOGR')) else ''
+    numero = str(row.get('NUM_ENDERECO', '')).strip() if pd.notna(row.get('NUM_ENDERECO')) else 's/n'
+    modificador = str(row.get('DSC_MODIFICADOR', '')).strip() if pd.notna(row.get('DSC_MODIFICADOR')) else ''
+    
+    # Montar nome do logradouro
+    partes_log = [p for p in [tipo_log, titulo_log, nome_log] if p]
+    logradouro = ' '.join(partes_log) if partes_log else 'Logradouro não informado'
+    
+    # Número com modificador
+    if modificador:
+        numero_completo = f"{numero} {modificador}"
+    else:
+        numero_completo = numero
+    
+    # Complementos (até 5 elementos possíveis)
+    complementos = []
+    for i in range(1, 6):
+        nom_comp = row.get(f'NOM_COMP_ELEM{i}', '')
+        val_comp = row.get(f'VAL_COMP_ELEM{i}', '')
+        if pd.notna(nom_comp) and pd.notna(val_comp) and str(nom_comp).strip() and str(val_comp).strip():
+            complementos.append(f"{nom_comp}: {val_comp}")
+    
+    complemento_str = ' | '.join(complementos) if complementos else ''
+    
+    # Localidade e CEP
+    localidade = str(row.get('DSC_LOCALIDADE', '')).strip() if pd.notna(row.get('DSC_LOCALIDADE')) else ''
+    cep = str(row.get('CEP', '')).strip() if pd.notna(row.get('CEP')) else ''
+    if len(cep) == 8:
+        cep_formatado = f"{cep[:5]}-{cep[5:]}"
+    else:
+        cep_formatado = cep
+    
+    # Montar endereço completo
+    endereco_parts = [logradouro, numero_completo]
+    if complemento_str:
+        endereco_parts.append(complemento_str)
+    endereco_parts.append(localidade) if localidade else None
+    endereco_parts.append(f"CEP: {cep_formatado}") if cep_formatado else None
+    
+    return ', '.join([p for p in endereco_parts if p])
+
+# Aplicar a função para criar coluna de endereço completo
+domicilios_risco['ENDERECO_COMPLETO'] = domicilios_risco.apply(construir_endereco, axis=1)
+
+```
+
+### Preparamos os dados para exportação
+
+
+```python
+# Colunas a serem exportadas (endereço + informações de localização + risco)
+colunas_exportar = [
+    'ENDERECO_COMPLETO',
+    'CEP',
+    'DSC_LOCALIDADE',
+    'NOM_TIPO_SEGLOGR',
+    'NOM_TITULO_SEGLOGR',
+    'NOM_SEGLOGR',
+    'NUM_ENDERECO',
+    'DSC_MODIFICADOR',
+    'LATITUDE',
+    'LONGITUDE',
+    'camada_origem',  # Tipo de risco (Geológico ou Hidrológico)
+    'COD_ESPECIE'     # Tipo de imóvel (domicílio, estabelecimento, etc.)
+]
+
+# Verificar quais colunas realmente existem no DataFrame
+colunas_existentes = [col for col in colunas_exportar if col in domicilios_risco.columns]
+df_export = domicilios_risco[colunas_existentes].copy()
+
+# Mapear COD_ESPECIE para descrição legível
+especie_desc = {
+    1: 'Domicílio particular',
+    2: 'Domicílio coletivo',
+    3: 'Estabelecimento agropecuário',
+    4: 'Estabelecimento de ensino',
+    5: 'Estabelecimento de saúde',
+    6: 'Estabelecimento de outras finalidades',
+    7: 'Edificação em construção ou reforma',
+    8: 'Estabelecimento religioso'
+}
+df_export['TIPO_IMOVEL'] = df_export['COD_ESPECIE'].map(especie_desc)
+
+```
+
+### Salvamos em arquivo texto
+
+
+```python
+output_file = 'enderecos_imoveis_areas_risco_jf.csv'
+df_export.to_csv(output_file, index=False, encoding='utf-8-sig')
+```
+
+### Visualizamos a distribuição dos imóveis
+
+
+```python
+# ============================================
+# CONFIGURAÇÕES INICIAIS
+# ============================================
+
+# Paletas acessíveis para daltonismo (colorblind-friendly)
+# Opção 1: Paul Tol's "Vibrant" palette (recomendada)
+CORES_ACESSIVEIS = ['#0077BB', '#33BBEE', '#EE7733', '#CC3311', '#009988', '#EE3377', '#BBBBBB']
+
+# Opção 2: Seaborn colorblind palette (já acessível)
+# from seaborn import color_palette
+# CORES_ACESSIVEIS = sns.color_palette("colorblind", 8)
+
+# Opção 3: CUD (Color Universal Design) - 8 cores seguras
+# CORES_ACESSIVEIS = ['#000000', '#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7']
+
+# Configurar estilo
+plt.style.use('default')
+sns.set_style("whitegrid")
+
+# Configurar fontes
+plt.rcParams['font.size'] = 11
+plt.rcParams['axes.titlesize'] = 14
+plt.rcParams['axes.labelsize'] = 12
+plt.rcParams['xtick.labelsize'] = 10
+plt.rcParams['ytick.labelsize'] = 10
 
 # Configurações para formato brasileiro
 pd.options.display.float_format = '{:.2f}'.format
 
-# Funções de formatação
-def formatar_br(numero):
-    return f"{numero:,.0f}".replace(",", ".")
+def formatar_numero_br(valor):
+    """Formata número inteiro no padrão brasileiro (63.267)"""
+    return f"{int(valor):,}".replace(",", ".")
 
-def formatar_moeda(numero):
-    return f"R$ {numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def formatar_percentual_br(valor):
+    """Formata percentual no padrão brasileiro (88,52%)"""
+    return f"{valor:.2f}".replace(".", ",") + "%"
 
-# Carregar os dados
-arquivo = 'fptc_072025.json'
-
-match = re.search(r'fptc_(\d{2})(\d{4})\.json', arquivo)
-if match:
-    mes_num = match.group(1)
-    ano = match.group(2)
-    
-    # Converte número do mês para nome
-    meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-             'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-    mes_nome = meses[int(mes_num) - 1]
-    
-    periodo = f"{mes_nome} de {ano}"
-else:
-    periodo = "Período Desconhecido"
-
-# Carrega os dados
-with open(arquivo, 'r', encoding='utf-8') as f:
-    data = json.load(f)
+# Tentar configurar locale para formatação de eixos
+try:
+    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+    usar_locale = True
+except:
+    usar_locale = False
+    def formatador_eixo_br(x, p):
+        return f"{int(x):,}".replace(",", ".")
 
 
-df = pd.DataFrame(data)
+# ============================================
+# DATAFRAME COM OS DADOS REAIS
+# ============================================
 
-# Pré-processamento
-df['valor_rem05'] = pd.to_numeric(df['valor_rem05'])
-df_salarios_positivos = df[df['valor_rem05'] > 0]
-professores = df[df['cargo'].str.contains('PROF', case=False, na=False)]
+contagem_especie = df_export['COD_ESPECIE'].value_counts().reset_index()
+contagem_especie.columns = ['COD_ESPECIE', 'QUANTIDADE']
 
-# Inicialização do Dash
-app = dash.Dash(__name__)
-server = app.server  # Importante para Render
+# Adicionar descrição
+contagem_especie['DESCRICAO'] = contagem_especie['COD_ESPECIE'].map(especie_desc)
 
-# Meta tags para responsividade
-app.index_string = '''
-<!DOCTYPE html>
-<html>
-    <head>
-        {%metas%}
-        <title>{%title%}</title>
-        {%favicon%}
-        {%css%}
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-            /* Estilos CSS para melhor responsividade */
-            .js-plotly-plot .plotly .main-svg {
-                width: 100% !important;
-            }
-            .plot-container {
-                width: 100% !important;
-            }
-        </style>
-    </head>
-    <body>
-        {%app_entry%}
-        <footer>
-            {%config%}
-            {%scripts%}
-            {%renderer%}
-        </footer>
-    </body>
-</html>
-'''
+# Ordenar por quantidade
+contagem_especie = contagem_especie.sort_values('QUANTIDADE', ascending=False).reset_index(drop=True)
 
-# Layout do dashboard
-app.layout = html.Div([
-    # Container principal com responsividade
-    html.Div([
-        html.Div([
-            html.H1("Folha de Pagamento", style={'margin': '0', 'fontSize': 'clamp(1.8rem, 2vw, 1.2rem)'}),
-            html.H2("PM Três Corações", style={'margin': '0', 'fontSize': 'clamp(1.4rem, 1.8vw, 1.1rem)'}),
-        ], style={'textAlign': 'center', 'marginBottom': '20px', 'padding': '0 10px'}),
-        
-        html.Div([
-            dcc.Dropdown(
-                id='analise-dropdown',
-                options=[
-                    {'label': 'Visão Geral', 'value': 'Visão Geral'},
-                    {'label': 'Distribuição Salarial', 'value': 'Distribuição Salarial'},
-                    {'label': 'Situação Funcional', 'value': 'Situação Funcional'},
-                    {'label': 'Natureza do Vínculo', 'value': 'Natureza do Vínculo'},
-                    {'label': 'Lotação por Secretaria', 'value': 'Lotação por Secretaria'},
-                    {'label': 'Gasto por Centro de Custo', 'value': 'Gasto por Centro de Custo'},
-                    {'label': 'Cargos de Comando', 'value': 'Cargos de Comando'},
-                    {'label': 'Análise de Professores', 'value': 'Análise de Professores'},
-                    {'label': 'Supersalários', 'value': 'Supersalários'}
-                ],
-                value='Visão Geral',
-                style={
-                    'width': '100%',
-                    'maxWidth': '500px',
-                    'margin': '14px auto',
-                    'fontSize': '16px'  # Melhor para mobile
-                }
-            )
-        ], style={'textAlign': 'center'}),
-        
-        html.Div(id='output-graph')
-    ], style={
-        'maxWidth': '1200px',
-        'margin': '0 auto',
-        'padding': '15px',
-        'fontFamily': 'Arial, sans-serif'
+# Calcular percentual
+total = contagem_especie['QUANTIDADE'].sum()
+contagem_especie['PERCENTUAL'] = (contagem_especie['QUANTIDADE'] / total) * 100
+
+print("="*80)
+print("DADOS PARA VISUALIZAÇÃO")
+print("="*80)
+print(f"{'Tipo de Imóvel':<45} {'Quantidade':>12} {'Percentual':>10}")
+print("-"*80)
+
+for _, row in contagem_especie.iterrows():
+    # Aplicar formatação apenas na impressão
+    quantidade_fmt = formatar_numero_br(row['QUANTIDADE'])
+    percentual_fmt = formatar_percentual_br(row['PERCENTUAL'])
+    print(f"{row['DESCRICAO']:<45} {quantidade_fmt:>12} {percentual_fmt:>10}")
+
+print("-"*80)
+print(f"{'TOTAL':<45} {formatar_numero_br(total):>12} {'100,00%':>10}")
+print("="*80)
+
+
+
+# ============================================
+# GRÁFICO 4: Pizza com percentuais formatados
+# ============================================
+
+# Agrupar categorias pequenas
+categorias_pequenas = contagem_especie[contagem_especie['PERCENTUAL'] < 1]
+categorias_principais_pizza = contagem_especie[contagem_especie['PERCENTUAL'] >= 1]
+
+if len(categorias_pequenas) > 0:
+    outros = pd.DataFrame({
+        'DESCRICAO': ['Outros (coletivo, agropecuário, ensino, saúde, religioso)'],
+        'QUANTIDADE': [categorias_pequenas['QUANTIDADE'].sum()],
+        'PERCENTUAL': [categorias_pequenas['PERCENTUAL'].sum()]
     })
-])
+    dados_pizza = pd.concat([categorias_principais_pizza, outros], ignore_index=True)
+else:
+    dados_pizza = contagem_especie.copy()
 
-def configurar_layout_responsivo(fig, titulo=None):
-    """Configura layout responsivo para gráficos Plotly"""
-    if titulo:
-        fig.update_layout(title=titulo)
+fig4, ax4 = plt.subplots(figsize=(10, 8))
+
+cores_pizza = CORES_ACESSIVEIS[:len(dados_pizza)]
+
+# Função para formatar percentual no autopct
+def autopct_format(pct):
+    valor = pct / 100 * total
+    return f'{pct:.1f}%\n({formatar_numero_br(valor)})'
+
+wedges, texts, autotexts = ax4.pie(
+    dados_pizza['QUANTIDADE'],
+    labels=dados_pizza['DESCRICAO'],
+    autopct=autopct_format,  # Usa formatação brasileira
+    colors=cores_pizza,
+    startangle=45,
+    explode=[0.03] * len(dados_pizza),
+    textprops={'fontsize': 10}
+)
+
+for autotext in autotexts:
+    autotext.set_color('white')
+    autotext.set_fontweight('bold')
+    autotext.set_fontsize(10)
+
+for text in texts:
+    text.set_fontsize(10)
+
+ax4.set_title('Distribuição de imóveis em áreas de risco por tipo', fontsize=14, fontweight='bold', pad=20)
+
+plt.tight_layout()
+plt.show()
+
+
+# ============================================
+# GRÁFICO 2: Categorias com mais de 1000 imóveis 
+# ============================================
+
+categorias_principais = contagem_especie[contagem_especie['QUANTIDADE'] > 1000].copy()
+
+if len(categorias_principais) > 0:
+    fig3, ax3 = plt.subplots(figsize=(10, 6))
     
-    fig.update_layout(
-        autosize=True,
-        margin=dict(l=50, r=50, b=50, t=80 if titulo else 50, pad=4),
-        font=dict(size=12),
-        height=500,  # Altura fixa que se adapta
-        paper_bgcolor='white',
-        plot_bgcolor='white'
+    cores_graf3 = CORES_ACESSIVEIS[:len(categorias_principais)]
+    
+    bars_p = ax3.bar(
+        categorias_principais['DESCRICAO'],
+        categorias_principais['QUANTIDADE'],
+        color=cores_graf3,
+        edgecolor='black',
+        linewidth=1.5,
+        alpha=0.85
     )
     
-    # Configurações para eixos em mobile
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=10))
-    fig.update_yaxes(tickfont=dict(size=10))
+    # Adicionar valores formatados
+    for bar, valor in zip(bars_p, categorias_principais['QUANTIDADE']):
+        ax3.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 100,
+            formatar_numero_br(valor),  # Formatação na saída
+            ha='center',
+            va='bottom',
+            fontsize=12,
+            fontweight='bold'
+        )
     
-    return fig
+    if usar_locale:
+        ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: locale.format_string("%d", x, grouping=True)))
+    else:
+        ax3.yaxis.set_major_formatter(plt.FuncFormatter(formatador_eixo_br))
+    
+    ax3.set_title('Categorias com mais de 1.000 imóveis em áreas de risco', 
+                  fontsize=14, fontweight='bold')
+    ax3.set_xlabel('')
+    ax3.set_ylabel('Número de Imóveis', fontsize=12)
+    
+    plt.xticks(rotation=0)
+    plt.tight_layout()
+    plt.show()
 
-# Callback para atualizar gráficos
-@app.callback(
-    Output('output-graph', 'children'),
-    Input('analise-dropdown', 'value')
+# ============================================
+# GRÁFICO 3: Escala logarítmica 
+# ============================================
+
+fig6, ax6 = plt.subplots(figsize=(12, 6))
+
+cores_graf6 = CORES_ACESSIVEIS[:len(contagem_especie)]
+
+bars_log = ax6.bar(
+    contagem_especie['DESCRICAO'],
+    contagem_especie['QUANTIDADE'],
+    color=cores_graf6,
+    edgecolor='black',
+    linewidth=1,
+    alpha=0.85
 )
-def update_graph(analise):
-    # Aqui você move a lógica de cada análise
-    if analise == 'Visão Geral':
-        total_servidores = len(df)
-        pessoas_unicas = df['nome'].nunique()
-        gasto_total = df['valor_rem05'].sum()
-        cargos_distintos = df['cargo'].nunique()
-    
-        fig = go.Figure(data=[go.Table(
-            header=dict(
-                values=['Métrica', 'Valor'],
-                fill_color='lightblue',
-                align='left',
-                font=dict(size=14, color='black')
-            ),
-            cells=dict(
-                values=[['Total de Servidores', 'Pessoas Únicas', 'Gasto Total', 'Cargos Distintos'],
-                       [formatar_br(total_servidores), formatar_br(pessoas_unicas), 
-                        formatar_moeda(gasto_total), formatar_br(cargos_distintos)]],
-                align='left',
-                font=dict(size=12)
-            ))
-        ])
-        
-        fig = configurar_layout_responsivo(
-            fig, 
-            f'Visão geral da Folha de Pagamento<br><sup>Dados de {periodo}</sup>'
-        )
-        return dcc.Graph(
-            figure=fig,
-            style={'height': '400px'}  # Altura fixa para tabelas
-        )
-    
-    
-    elif analise == 'Distribuição Salarial':
-        fig = make_subplots(
-            rows=1, 
-            cols=2, 
-            subplot_titles=['Box Plot', 'Histograma'],
-            specs=[[{"type": "box"}, {"type": "histogram"}]]
-        )
-        fig.add_trace(go.Box(y=df_salarios_positivos['valor_rem05'], name='Salários'), row=1, col=1)
-        fig.add_trace(go.Histogram(x=df_salarios_positivos['valor_rem05'], nbinsx=30), row=1, col=2)
-        
-        fig = configurar_layout_responsivo(
-            fig, 
-            f'Distribuição Salarial<br><sup>Dados de {periodo}</sup>'
-        )
-        
-        # Layout específico para subplots em mobile
-        fig.update_layout(
-            height=600  # Mais altura para subplots
-        )
-    
-        return dcc.Graph(figure=fig)
-    
-    
 
-    elif analise == 'Situação Funcional':
-        situacao = df['situacao'].value_counts().reset_index()
-        situacao.columns = ['Situação', 'Quantidade']
-        situacao = situacao.sort_values('Quantidade', ascending=True).head(20)
-        situacao['Quantidade'] = situacao['Quantidade'].apply(lambda x: formatar_br(x))
-            
-        fig = px.bar(situacao, x='Quantidade', y='Situação', orientation='h')
-        fig = configurar_layout_responsivo(
-            fig,
-            f'Situação funcional dos Servidores<br><sup> Dados de {periodo} <br><br><br><br></sup>'
-        )
-    
-            
-        # Ajuste específico para barras horizontais em mobile
-        fig.update_layout(
-            height=600,  # Mais altura para labels longos
-            yaxis={'categoryorder': 'total ascending'}
-        )
-        
-        return dcc.Graph(figure=fig)
+for bar, valor in zip(bars_log, contagem_especie['QUANTIDADE']):
+    ax6.text(
+        bar.get_x() + bar.get_width() / 2,
+        bar.get_height() * 1.1,
+        f'{valor:,.0f}',
+        ha='center',
+        va='bottom',
+        fontsize=9,
+        fontweight='bold',
+        rotation=45
+    )
 
-        
-    elif analise == 'Natureza do Vínculo':
-        vinculo = df['regime'].value_counts().reset_index()
-        vinculo.columns = ['Regime', 'Quantidade']
-        
-        # Criar diagrama de Sankey
-        fig = go.Figure(go.Sankey(
-            node=dict(
-                pad=15,
-                thickness=20,
-                line=dict(color="black", width=0.5),
-                label=["Total"] + vinculo['Regime'].tolist(),
-                color="blue"
-            ),
-            link=dict(
-                source=[0] * len(vinculo),
-                target=list(range(1, len(vinculo)+1)),
-                value=vinculo['Quantidade'].tolist(),
-                label=[f"{formatar_br(qtd)}" for qtd in vinculo['Quantidade']],
-                color=px.colors.qualitative.Pastel
-            )
-        ))
-        
-        fig.update_layout(
-            title_text=f"Natureza do vínculo empregatício - Diagrama de Sankey <br><sup> Dados de {periodo} </sup>",
-            font_size=12,
-            height=500
-        )
-        
-        
-        return dcc.Graph(figure=fig)
-        
-    elif analise == 'Lotação por Secretaria':
-        lotacao = df['local'].value_counts().reset_index().head(20)
-        lotacao.columns = ['Local', 'Quantidade']
-        lotacao = lotacao.sort_values('Quantidade', ascending=True).head(20)
-        lotacao['Quantidade'] = lotacao['Quantidade'].apply(lambda x: formatar_br(x))
-        
-        fig = px.bar(lotacao, x='Quantidade', y='Local', orientation='h')
-        fig = configurar_layout_responsivo(
-            fig,
-            f'Top 20 Lotação por Secretaria<br><sup>Dados de {periodo}</sup>'
-        )
-    
-        # Ajuste específico para barras horizontais em mobile
-        fig.update_layout(
-            height=600,  # Mais altura para labels longos
-            yaxis={'categoryorder': 'total ascending'}
-        )
-    
-        return dcc.Graph(figure=fig)
-        
-    elif analise == 'Gasto por Centro de Custo':
-        despesa_cc = df.groupby('centro_custo')['valor_rem05'].sum().reset_index()
-        despesa_cc.columns = ['Centro de Custo', 'Total']
-        despesa_cc = despesa_cc.sort_values('Total', ascending=True).head(20)
-        despesa_cc['Total'] = despesa_cc['Total'].apply(lambda x: formatar_moeda(x))
-        
-        fig = px.bar(despesa_cc, x='Total', y='Centro de Custo', orientation='h')
-        fig = configurar_layout_responsivo(
-            fig,
-            f'Top 20 Gasto por Centro de Custo <br><sup> Dados de {periodo} <br><br></sup>'
-        )
-                     
-        #fig.show()
-        # Ajuste específico para barras horizontais em mobile
-        fig.update_layout(
-            height=600,  # Mais altura para labels longos
-            yaxis={'categoryorder': 'total ascending'}
-        )
-    
-        return dcc.Graph(figure=fig)
-        
-    elif analise == 'Cargos de Comando':
-        cargos_comando = [
-            "SECRETARIO MUNICIPAL", "SECRETARIO ADJUNTO", "SUBSECRETARIO",
-            "DIRETOR", "CHEFE", "COORDENADOR", "GERENTE", "ASSESSOR",
-            "SUPERINTENDENTE", "SUPERVISOR"
-        ]
-        
-        comando_counts = {}
-        for cargo in cargos_comando:
-            count = df[df['cargo'].str.contains(cargo, case=False, na=False) & 
-                       (df['situacao'] == 'Ativo')].shape[0]
-            comando_counts[cargo] = count
-            
-        df_comando = pd.DataFrame.from_dict(comando_counts, orient='index', columns=['Quantidade'])
-        df_comando = df_comando[df_comando['Quantidade'] > 0].sort_values('Quantidade', ascending=True)
+ax6.set_yscale('log')
+ax6.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
+ax6.set_title('Quantidade de imóveis em areas de risco por tipo (escala logarítmica)', 
+              fontsize=14, fontweight='bold', pad=20)
+ax6.set_xlabel('')
+ax6.set_ylabel('Número de imóveis (escala log)', fontsize=12)
+plt.xticks(rotation=45, ha='right')
 
-        fig1 = go.Figure(go.Table(
-            header=dict(values=['Cargo', 'Quantidade'],
-                        fill_color='lightgreen',
-                        align='left'),
-            cells=dict(values=[df_comando.index, df_comando['Quantidade']],
-                       align='left'))) 
-        fig1.update_layout(title=f'<sup> Dados de {periodo} </sup>', height=320)
+plt.tight_layout()
+plt.show()
 
-        
-        fig2 = px.bar(df_comando, x=df_comando.index, y='Quantidade',
-                     title=f'Quantidade por Cargo de Comando <br><sup> Dados de {periodo} <br><br></sup>',
-                     width=800, height=500)
-
-        
-        # Retorna ambas
-        fig1 = configurar_layout_responsivo(fig1, "Tabela de Cargos de Comando")
-        fig2 = configurar_layout_responsivo(fig2, "Quantidade por Cargo de Comando")
-        
-        # Container responsivo para múltiplos gráficos
-        return html.Div([
-            dcc.Graph(
-                figure=fig1,
-                style={'height': '400px', 'marginBottom': '20px'}
-            ),
-            dcc.Graph(
-                figure=fig2, 
-                style={'height': '500px'}
-            )
-        ])
-        
-    elif analise == 'Análise de Professores':
-        # Estatísticas dos professores
-        salarios_prof = professores[professores['valor_rem05'] > 0]['valor_rem05']
-        estatisticas_prof = {
-            'Média': salarios_prof.mean(),
-            'Mediana': salarios_prof.median(),
-            'Desvio Padrão': salarios_prof.std(),
-            'Mínimo': salarios_prof.min(),
-            'Máximo': salarios_prof.max()
-        }
-        
-        df_estat_prof = pd.DataFrame.from_dict(estatisticas_prof, orient='index', columns=['Valor'])
-        df_estat_prof['Valor'] = df_estat_prof['Valor'].apply(lambda x: formatar_moeda(x))
-        
-        fig1 = go.Figure(go.Table(
-            header=dict(values=['Estatística', 'Valor'],
-                        fill_color='lightgreen',
-                        align='left'),
-            cells=dict(values=[df_estat_prof.index, df_estat_prof['Valor']],
-                       align='left')))
-        
-        fig1.update_layout(title=f'Estatísticas salariais - Professores <br><sup> Dados de {periodo} </sup>', height=300)
-        
-        # Distribuição salarial dos professores
-        fig2 = px.histogram(professores[professores['valor_rem05'] > 0], x='valor_rem05', nbins=30,
-                           title=f'Distribuição salarial dos Professores <br><sup> Dados de {periodo} </sup>',
-                           width=800, height=500)
-        
-        
-        # Retorna ambas
-        fig1 = configurar_layout_responsivo(fig1, "Estatísticas salariais - Professores")
-        fig2 = configurar_layout_responsivo(fig2, "Distribuição salarial dos Professores")
-        
-        # Container responsivo para múltiplos gráficos
-        return html.Div([
-            dcc.Graph(
-                figure=fig1,
-                style={'height': '400px', 'marginBottom': '20px'}
-            ),
-            dcc.Graph(
-                figure=fig2, 
-                style={'height': '500px'}
-            )
-        ])
-        
-    elif analise == 'Supersalários':
-        top_20 = df.sort_values('valor_rem05', ascending=False).head(20)
-        top_20['valor_formatado'] = top_20['valor_rem05'].apply(lambda x: formatar_moeda(x))
-
-        # Criar IDs anônimos sequenciais
-        top_20['id_anonimo'] = ['Servidor ' + str(i+1) for i in range(len(top_20))]
-
-        fig = px.bar(top_20, x='id_anonimo', y='valor_rem05', 
-                     hover_data=['cargo', 'local', 'valor_formatado'])
-        fig = configurar_layout_responsivo(
-            fig,
-            f'Top 20 maiores salários <br><sup> Dados de {periodo} </sup>')
-        fig.update_layout(xaxis_title='Servidor',
-                         yaxis_title='Salário',
-                         xaxis={'categoryorder':'total descending'})
-        
-        # Ajuste específico para barras horizontais em mobile
-        fig.update_layout(
-            height=600,  # Mais altura para labels longos
-            yaxis={'categoryorder': 'total ascending'}
-        )
-    
-        return dcc.Graph(figure=fig)
-
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=8050)
 ```
 
+    ================================================================================
+    DADOS PARA VISUALIZAÇÃO
+    ================================================================================
+    Tipo de Imóvel                                  Quantidade Percentual
+    --------------------------------------------------------------------------------
+    Domicílio particular                                63.267     88,52%
+    Estabelecimento de outras finalidades                5.214      7,30%
+    Edificação em construção ou reforma                  2.409      3,37%
+    Estabelecimento religioso                              398      0,56%
+    Estabelecimento de ensino                               81      0,11%
+    Estabelecimento de saúde                                64      0,09%
+    Estabelecimento agropecuário                            21      0,03%
+    Domicílio coletivo                                      18      0,03%
+    --------------------------------------------------------------------------------
+    TOTAL                                               71.472    100,00%
+    ================================================================================
 
-### Considerações finais
 
-Os gráficos podem ser selecionados em uma caixa **dropdown**, 
-de acordo com a tela inicial:
-![](fopag.png)
 
-O *dashboard* pode ser acessado em: https://guilhermeferreirajf.pythonanywhere.com/.
+    
+![png](output_20_1.png)
+    
+
+
+
+    
+![png](output_20_2.png)
+    
+
+
+
+    
+![png](output_20_3.png)
+    
+
+
+**Considerações finais:**
+
+O poder discriminatório do código pode ser ampliado com ferramentas complementares para preencher lacunas temporais e espaciais, considerando eventos como: lapso entre levantamentos, novas construções, mobilidade social e outras alterações na estrutura do território.
+
+Como resultado adicional, visualizamos a distribuição dos imóveis por espécie.
